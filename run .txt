@@ -1,0 +1,15 @@
+# 1. Backend (Node.js + Socket.io on port 8000)
+cd backend
+npm run dev
+
+# 2. Layer 3 Pre-Check Service (Python FastAPI on port 8001)
+cd precheck-service
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+# 3. Layer 2 ML Ranking Service (Python FastAPI on port 8002)
+cd ml-service
+uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+
+# 4. Frontend Web App (React + Vite on port 3000)
+cd frontend
+npm run dev
