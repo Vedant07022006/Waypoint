@@ -1,5 +1,6 @@
 // backend/src/services/email.service.js
 import { getTransporter, MAIL_FROM_NAME, MAIL_FROM_EMAIL } from "../config/mailer.js";
+import logger from "../config/logger.js";
 
 const otpEmailTemplate = ({ name, otp, purpose }) => {
   const purposeMap = {
@@ -153,31 +154,15 @@ export const sendOtpEmail = async (param1, param2, param3, param4) => {
     EMAIL_CHANGE: "Waypoint - Confirm Email Change Code",
   };
 
-  try {
-    const mailer = await getTransporter();
+  const mailer = await getTransporter();
 
-    await mailer.sendMail({
-      from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_EMAIL}>`,
-      to,
-      subject: subjectMap[purpose] || "Waypoint - Verification Code",
-      text: `Your Waypoint verification code is: ${otp}. This code expires in 10 minutes.`,
-      html: otpEmailTemplate({
-        name,
-        otp,
-        purpose,
-      }),
-    });
+  await mailer.sendMail({
+    from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_EMAIL}>`,
+    to,
+    subject: subjectMap[purpose] || "Waypoint - Verification Code",
+    text: `Your Waypoint verification code is: ${otp}. This code expires in 10 minutes.`,
+    html: otpEmailTemplate({ name, otp, purpose }),
+  });
 
-    console.log(`[email] OTP successfully sent to ${to}`);
-  } catch (err) {
-    console.error("SMTP send error:", err.message);
-
-    // In local development, log the OTP to console so testing isn't blocked if SMTP credentials are not yet configured
-    if (process.env.NODE_ENV === "development") {
-      console.log(`\n[DEV FALLBACK] OTP for ${to} (${purpose}) is: ${otp}\n`);
-      return;
-    }
-
-    throw new Error("Failed to send email. Please try again later.");
-  }
+  logger.info(`OTP email sent`, { to, purpose });
 };

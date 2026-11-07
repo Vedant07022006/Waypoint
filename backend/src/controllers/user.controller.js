@@ -16,7 +16,7 @@ import { sendOtpEmail } from "../services/email.service.js";
 
 // REGISTER
 export const registerUser = asyncHandler(async (req, res) => {
-    let { fullName, username, email, password } = req.body;
+    let { fullName, username, email, password, role } = req.body;
 
     // 1. VALIDATION
     if (!fullName || !username || !email || !password) {
@@ -79,11 +79,13 @@ export const registerUser = asyncHandler(async (req, res) => {
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
     // 6. CREATE USER
+    const normalizedRole = role ? role.toLowerCase().trim() : "developer";
     const user = await User.create({
         fullName,
         username,
         email,
         passwordHash,
+        role: normalizedRole,
         isVerified: false,
         authProvider: "local",
     });
@@ -210,6 +212,9 @@ export const verifyOTP = asyncHandler(async (req, res) => {
                         fullName: updatedUser.fullName,
                         username: updatedUser.username,
                         email: updatedUser.email,
+                        role: updatedUser.role,
+                        expertiseTags: updatedUser.expertiseTags || [],
+                        currentOpenReviews: updatedUser.currentOpenReviews || 0,
                     },
                 },
                 "Account verified successfully"
@@ -229,7 +234,7 @@ export const resendOtp = asyncHandler(async (req, res) => {
     email = email.toLowerCase().trim();
     purpose = purpose || "REGISTER";
 
-    if (!["REGISTER", "PASSWORD_RESET"].includes(purpose)) {
+    if (!["REGISTER", "PASSWORD_RESET", "EMAIL_CHANGE"].includes(purpose)) {
         throw new ApiError(400, "Invalid OTP purpose");
     }
 
@@ -387,10 +392,14 @@ export const loginUser = asyncHandler(async (req, res) => {
                     accessToken,
                     refreshToken,
                     user: {
+                        _id: user._id,
                         id: user._id,
                         fullName: user.fullName,
                         username: user.username,
                         email: user.email,
+                        role: user.role,
+                        expertiseTags: user.expertiseTags || [],
+                        currentOpenReviews: user.currentOpenReviews || 0,
                     },
                 },
                 "Login successful"
@@ -882,6 +891,51 @@ export const deleteAccount = asyncHandler(async (req, res) => {
         .clearCookie("accessToken", cookieOptions)
         .clearCookie("refreshToken", cookieOptions)
         .json(new ApiResponse(200, null, "Account deleted successfully"));
+});
+
+// GET /api/v1/users/search?q=query
+export const searchUsersController = asyncHandler(async (req, res) => {
+    const { q } = req.query;
+    if (!q || !q.trim()) {
+        const recentUsers = await User.find({ isVerified: true })
+            .select("fullName username email role currentOpenReviews")
+            .limit(20)
+            .lean();
+        return res.status(200).json(new ApiResponse(200, recentUsers, "Users fetched successfully"));
+    }
+
+    const regex = new RegExp(q.trim(), "i");
+    const users = await User.find({
+        isVerified: true,
+        $or: [{ username: regex }, { email: regex }, { fullName: regex }],
+    })
+        .select("fullName username email role currentOpenReviews")
+        .limit(20)
+        .lean();
+
+    return res.status(200).json(new ApiResponse(200, users, "Users found successfully"));
+});
+
+// PATCH /api/v1/users/profile
+export const updateProfileController = asyncHandler(async (req, res) => {
+    const userId = req.user._id || req.user.id;
+    const { fullName, expertiseTags } = req.body;
+
+    const updateData = {};
+    if (fullName) updateData.fullName = fullName.trim();
+    if (Array.isArray(expertiseTags)) {
+        updateData.expertiseTags = Array.from(
+            new Set(expertiseTags.map((t) => t.trim().toLowerCase()).filter(Boolean))
+        );
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, { new: true })
+        .select("-passwordHash")
+        .lean();
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
 });
 
 
