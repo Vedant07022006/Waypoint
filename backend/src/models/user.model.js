@@ -41,6 +41,11 @@ const userSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    role: {
+      type: String,
+      enum: ["owner", "team_lead", "developer", "reviewer", "developer_reviewer"],
+      default: "developer",
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -49,6 +54,22 @@ const userSchema = new Schema(
       type: Date,
       default: null,
     },
+    // ── ML Service Fields ────────────────────────────────────────────────────
+    // Populated on every commit — used by TF-IDF expertise profiling (Phase 7)
+    commitHistory: [
+      {
+        files: [{ type: String }],
+        message: { type: String },
+        _id: false,
+      },
+    ],
+    // Live workload counter — incremented on assignment, decremented on completion
+    currentOpenReviews: {
+      type: Number,
+      default: 0,
+    },
+    // Optional manually tagged areas of expertise (e.g. ["auth", "payments"])
+    expertiseTags: [{ type: String }],
   },
   {
     timestamps: true,

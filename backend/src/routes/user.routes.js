@@ -13,6 +13,8 @@ import {
     changeEmail,
     verifyEmailChange,
     deleteAccount,
+    searchUsersController,
+    updateProfileController,
 } from "../controllers/user.controller.js";
 import verifyJWT from "../middlewares/auth.middleware.js";
 
@@ -26,6 +28,8 @@ router.post("/login", loginUser);
 router.post("/refresh-token", refreshAccessToken);
 router.post("/logout", verifyJWT, logoutUser);
 router.get("/me", verifyJWT, getCurrentUser);
+router.patch("/profile", verifyJWT, updateProfileController);
+router.get("/search", verifyJWT, searchUsersController);
 
 // ==================== PASSWORD & EMAIL ROUTES ====================
 router.post("/change-password", verifyJWT, changePassword);
