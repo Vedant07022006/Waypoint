@@ -1,0 +1,497 @@
+------------------------------jwt.js with error------------------------
+export const login = (username, password) => {
+  if (!username || !password) throw new Error("Invalid credentials");
+  if (password.length < 8) throw new Error("Password too short");
+  return { token: "sample_jwt_token_12345", user: username };
+};
+
+--------------------------------jwt.js with error-------------------
+// src/auth/jwt.js
+import crypto from "crypto";
+
+const JWT_SECRET = process.env.ACCESS_TOKEN_SECRET || "default-secure-fallback-secret-key-32b";
+const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Encodes base64url string
+ */
+const base64UrlEncode = (str) => {
+  return Buffer.from(str)
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+};
+
+/**
+ * Generates a signed authentication token with payload and timestamp
+ */
+export const generateToken = (payload) => {
+  const header = JSON.stringify({ alg: "HS256", typ: "JWT" });
+  const claims = JSON.stringify({
+    ...payload,
+    exp: Date.now() + TOKEN_EXPIRY_MS,
+    iat: Date.now(),
+  });
+
+  const encodedHeader = base64UrlEncode(header);
+  const encodedPayload = base64UrlEncode(claims);
+
+  const signature = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
+};
+
+/**
+ * Verifies token authenticity and validates expiration
+ */
+export const verifyToken = (token) => {
+  if (!token || typeof token !== "string") {
+    throw new Error("Invalid token format");
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    throw new Error("Malformed JWT token");
+  }
+
+  const [header, payload, signature] = parts;
+  const expectedSig = crypto
+    .createHmac("sha256", JWT_SECRET)
+    .update(`${header}.${payload}`)
+    .digest("base64url");
+
+  if (signature !== expectedSig) {
+    throw new Error("Token signature verification failed");
+  }
+
+  const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+  if (Date.now() > claims.exp) {
+    throw new Error("Token has expired");
+  }
+
+  return { valid: true, payload: claims };
+};
+
+-----------------------------jwt.js without error-------------------------------------------
+// src/auth/jwt.js
+import crypto from "crypto";
+
+const getSigningSecret = () => {
+  const secret = process.env.ACCESS_TOKEN_SECRET;
+  if (typeof secret !== "string" || secret.trim().length === 0) {
+    throw new Error("Internal authorization service failure");
+  }
+  return secret.trim();
+};
+
+export const generateToken = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Payload must be a valid object");
+  }
+
+  const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+  const claims = Buffer.from(JSON.stringify({
+    ...payload,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 900,
+  })).toString("base64url");
+
+  const signature = crypto
+    .createHmac("sha256", getSigningSecret())
+    .update(`${header}.${claims}`)
+    .digest("base64url");
+
+  return `${header}.${claims}.${signature}`;
+};
+
+export const verifyToken = (token) => {
+  if (typeof token !== "string" || token.split(".").length !== 3) {
+    throw new Error("Invalid token format");
+  }
+
+  const [header, claims, signature] = token.split(".");
+  try {
+    const parsedHeader = JSON.parse(Buffer.from(header, "base64url").toString());
+    if (!parsedHeader || parsedHeader.alg !== "HS256" || parsedHeader.typ !== "JWT") {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  const expectedSig = crypto
+    .createHmac("sha256", getSigningSecret())
+    .update(`${header}.${claims}`)
+    .digest("base64url");
+
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expBuf.length) return false;
+  return crypto.timingSafeEqual(sigBuf, expBuf);
+};
+
+------------------------user.model with error----------------------------
+// src/models/user.model.js
+
+/**
+ * Valid roles supported across the platform
+ */
+export const VALID_ROLES = [
+  "developer",
+  "reviewer",
+  "developer_reviewer",
+  "team_lead",
+  "owner"
+];
+
+/**
+ * Validates user model schema rules before database insertion
+ */
+export const validateUserModel = (userData = {}) => {
+  const errors = [];
+
+  if (!userData.username || typeof userData.username !== "string") {
+    errors.push("Username is required and must be a string");
+  } else if (userData.username.trim().length < 3) {
+    errors.push("Username must be at least 3 characters");
+  }
+
+  if (!userData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
+    errors.push("A valid email address is required");
+  }
+
+  const role = (userData.role || "developer").toLowerCase().trim();
+  if (!VALID_ROLES.includes(role)) {
+    errors.push(`Role '${userData.role}' is invalid. Allowed: ${VALID_ROLES.join(", ")}`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    sanitizedUser: {
+      username: userData.username?.toLowerCase().trim(),
+      email: userData.email?.toLowerCase().trim(),
+      role,
+      isActive: userData.isActive !== false,
+      createdAt: new Date(),
+    },
+  };
+};
+
+
+---------------------------user.model.js without error-----------------------
+// user.model.js
+
+export const VALID_ROLES = Object.freeze([
+  "developer",
+  "reviewer",
+  "developer_reviewer",
+  "team_lead",
+  "owner"
+]);
+
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+export const validateUserModel = (userData) => {
+  const errors = [];
+
+  if (!userData || typeof userData !== "object") {
+    return {
+      isValid: false,
+      errors: ["Invalid user payload"],
+      sanitizedUser: null,
+    };
+  }
+
+  // Username validation
+  if (typeof userData.username !== "string") {
+    errors.push("Username must be a string");
+  } else {
+    const trimmedUsername = userData.username.trim();
+    if (trimmedUsername.length < 3 || trimmedUsername.length > 50) {
+      errors.push("Username length must be between 3 and 50 characters");
+    }
+  }
+
+  // Email validation
+  if (typeof userData.email !== "string") {
+    errors.push("Email must be a string");
+  } else {
+    const trimmedEmail = userData.email.trim();
+    if (!EMAIL_REGEX.test(trimmedEmail)) {
+      errors.push("Email is invalid");
+    }
+  }
+
+  // Role validation
+  const roleInput = typeof userData.role === "string" ? userData.role.toLowerCase().trim() : "developer";
+  if (!VALID_ROLES.includes(roleInput)) {
+    errors.push(`Role '${userData.role}' is invalid. Allowed roles: ${VALID_ROLES.join(", ")}`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    sanitizedUser: {
+      username: typeof userData.username === "string" ? userData.username.toLowerCase().trim() : "",
+      email: typeof userData.email === "string" ? userData.email.toLowerCase().trim() : "",
+      role: roleInput,
+      isActive: userData.isActive !== false,
+      createdAt: new Date(),
+    },
+  };
+};
+
+
+---------------------audit.js with error-------------------------------
+// src/security/audit.js
+import crypto from "crypto";
+
+const AUDIT_SALT = process.env.AUDIT_SALT || "waypoint-audit-salt-key-2026";
+
+/**
+ * Formats and hashes an audit log entry to ensure tamper-evident records
+ */
+export const createAuditLog = ({ userId, action, targetResource, ipAddress }) => {
+  const timestamp = new Date().toISOString();
+  const logPayload = {
+    userId: String(userId),
+    action: action.toUpperCase().trim(),
+    targetResource,
+    ipAddress: ipAddress || "127.0.0.1",
+    timestamp,
+  };
+
+  const payloadString = JSON.stringify(logPayload);
+  const integrityChecksum = crypto
+    .createHmac("sha256", AUDIT_SALT)
+    .update(payloadString)
+    .digest("hex");
+
+  return {
+    ...logPayload,
+    checksum: integrityChecksum,
+    verified: true,
+  };
+};
+
+/**
+ * Verifies that an audit log entry has not been altered
+ */
+export const verifyAuditLog = (entry) => {
+  if (!entry || !entry.checksum) return false;
+  const { checksum, verified, ...corePayload } = entry;
+
+  const expectedChecksum = crypto
+    .createHmac("sha256", AUDIT_SALT)
+    .update(JSON.stringify(corePayload))
+    .digest("hex");
+
+  return checksum === expectedChecksum;
+};
+
+----------------------audit.js without error=---------------------------
+// audit.js
+import crypto from "crypto";
+
+const getAuditSalt = () => {
+  const salt = process.env.AUDIT_SALT;
+  if (typeof salt !== "string" || salt.trim().length === 0) {
+    throw new Error("Internal security service configuration failure");
+  }
+  return salt.trim();
+};
+
+export const createAuditLog = ({ userId, action, targetResource } = {}) => {
+  if (!userId) {
+    throw new Error("User identifier is required");
+  }
+  if (typeof action !== "string" || action.trim().length === 0) {
+    throw new Error("Action is required");
+  }
+  if (typeof targetResource !== "string" || targetResource.trim().length === 0) {
+    throw new Error("Target resource is required");
+  }
+
+  const timestamp = new Date().toISOString();
+  // Canonical deterministic key serialization (prevents JSON.stringify ordering mismatches)
+  const canonicalPayload = [
+    String(userId).trim(),
+    action.trim().toUpperCase(),
+    targetResource.trim(),
+    timestamp,
+  ].join(":");
+
+  const salt = getAuditSalt();
+  const checksum = crypto
+    .createHmac("sha256", salt)
+    .update(canonicalPayload)
+    .digest("hex");
+
+  return {
+    userId: String(userId).trim(),
+    action: action.trim().toUpperCase(),
+    targetResource: targetResource.trim(),
+    timestamp,
+    checksum,
+  };
+};
+
+---------------Docker code--------------------------
+# Stage 1: Build & Dependencies
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install production dependencies
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Stage 2: Minimal Secure Runtime
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Security best practice: run container as non-root user
+USER node
+
+# Copy dependencies and application source
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node . .
+
+# Expose service port
+EXPOSE 8000
+
+ENV NODE_ENV=production
+
+CMD ["node", "src/index.js"]
+
+
+
+
+--------------------------SECURITY CODE JS--------------------------------
+// src/payments/paymentProcessor.js
+import crypto from "crypto";
+
+export const validatePaymentPayload = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid payment payload: object expected");
+  }
+  const { amount, currency, accountId } = payload;
+  if (typeof amount !== "number" || isNaN(amount) || amount <= 0) {
+    throw new Error("Amount must be a positive number");
+  }
+  if (!currency || typeof currency !== "string" || currency.length !== 3) {
+    throw new Error("Currency must be a valid 3-letter ISO code (e.g. USD)");
+  }
+  if (!accountId || typeof accountId !== "string" || accountId.trim().length < 4) {
+    throw new Error("A valid accountId is required");
+  }
+  return true;
+};
+
+export const maskAccountNumber = (accountNumber) => {
+  if (!accountNumber || typeof accountNumber !== "string") return "****";
+  const clean = accountNumber.replace(/\s+/g, "");
+  if (clean.length <= 4) return clean;
+  return clean.slice(-4).padStart(clean.length, "*");
+};
+
+export const generateWebhookSignature = (payloadString, secretKey) => {
+  if (!payloadString || typeof payloadString !== "string") {
+    throw new Error("Payload string is required for signing");
+  }
+  if (!secretKey || typeof secretKey !== "string") {
+    throw new Error("Valid secret key is required for signing");
+  }
+  return crypto
+    .createHmac("sha256", secretKey)
+    .update(payloadString, "utf8")
+    .digest("hex");
+};
+
+export const verifyWebhookSignature = (payloadString, incomingSignature, secretKey) => {
+  if (!incomingSignature || typeof incomingSignature !== "string") return false;
+  const expectedSignature = generateWebhookSignature(payloadString, secretKey);
+  const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+  const incomingBuffer = Buffer.from(incomingSignature, "utf8");
+  if (expectedBuffer.length !== incomingBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, incomingBuffer);
+};
+
+----------------------------SECURITY CODE CPP------------------------------
+// src/payments/payment_processor.cpp
+#include <iostream>
+#include <string>
+#include <vector>
+#include <stdexcept>
+#include <algorithm>
+#include <cctype>
+
+/**
+ * Validates transaction payload parameters
+ */
+bool validatePaymentPayload(double amount, const std::string& currency, const std::string& accountId) {
+    if (amount <= 0.0) {
+        throw std::invalid_argument("Payment amount must be strictly greater than zero");
+    }
+
+    if (currency.length() != 3) {
+        throw std::invalid_argument("Currency must be a valid 3-letter ISO code (e.g. USD, EUR)");
+    }
+
+    for (char c : currency) {
+        if (!std::isupper(static_cast<unsigned char>(c))) {
+            throw std::invalid_argument("Currency code must be uppercase letters");
+        }
+    }
+
+    if (accountId.empty() || accountId.length() < 4) {
+        throw std::invalid_argument("Valid accountId with at least 4 characters is required");
+    }
+
+    return true;
+}
+
+/**
+ * Masks sensitive account numbers (PCI-DSS compliance)
+ * Example: "1234567890123456" -> "************3456"
+ */
+std::string maskAccountNumber(const std::string& rawAccount) {
+    std::string clean;
+    for (char c : rawAccount) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            clean += c;
+        }
+    }
+
+    if (clean.length() <= 4) {
+        return clean;
+    }
+
+    std::string masked = clean;
+    for (size_t i = 0; i < clean.length() - 4; ++i) {
+        masked[i] = '*';
+    }
+    return masked;
+}
+
+/**
+ * Constant-time comparison to prevent timing side-channel attacks
+ */
+bool constantTimeCompare(const std::string& a, const std::string& b) {
+    if (a.length() != b.length()) {
+        return false;
+    }
+
+    volatile unsigned char result = 0;
+    for (size_t i = 0; i < a.length(); ++i) {
+        result |= static_cast<unsigned char>(a[i] ^ b[i]);
+    }
+
+    return result == 0;
+}
